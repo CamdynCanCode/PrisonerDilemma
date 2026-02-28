@@ -1,82 +1,150 @@
 // interpreter.js
 
 function runBotScript(script, state) {
-    const lines = script.split("\n").map(l => l.trim()).filter(l => l && !l.startsWith("#"));
-    let variables = Object.assign({}, state); // copy of state
-    let move = "C";
-    let i = 0;
 
-    function evaluateExpression(expr) {
-        expr = expr.replace(/\bRANDOM\(\)/g, () => Math.random() < 0.5 ? '"C"' : '"D"');
+    // --- Persistent state ---
+    let variables = { ...state };
 
-        // Replace C and D literals
-        expr = expr.replace(/\bC\b/g, '"C"');
-        expr = expr.replace(/\bD\b/g, '"D"');
+    // Default move
+    variables.move = variables.move || "C";
 
-        // Replace variables
-        for (let key in variables) {
-            expr = expr.replace(new RegExp(`\\b${key}\\b`, "g"), JSON.stringify(variables[key]));
-        }
+    function RANDOM() {
+        return Math.random() < 0.5 ? "C" : "D";
+    }
+
+    // --- Tokenization ---
+    function tokenize(code) {
+        return code
+            .replace(/#/g, "//") // allow comments
+            .split(/\n/)
+            .map(l => l.trim())
+            .filter(l => l.length > 0 && !l.startsWith("//"));
+    }
+
+    const lines = tokenize(script);
+
+    // --- Expression evaluator (safe math + logic only) ---
+    function evaluate(expr) {
+        expr = expr
+            .replace(/\bAND\b/g, "&&")
+            .replace(/\bOR\b/g, "||");
+
+        // Replace variable names with values
+        Object.keys(variables).forEach(key => {
+            const value = typeof variables[key] === "string"
+                ? `"${variables[key]}"`
+                : variables[key];
+
+            expr = expr.replace(
+                new RegExp(`\\b${key}\\b`, "g"),
+                value
+            );
+        });
 
         try {
-            return eval(expr);
-        } catch (e) {
+            return Function(`"use strict"; return (${expr})`)();
+        } catch {
             return false;
         }
     }
 
-    while (i < lines.length) {
-        let line = lines[i];
-        if (line.startsWith("IF ")) {
-            const condMatch = line.match(/IF (.+) THEN/);
-            if (condMatch) {
-                let condition = condMatch[1];
-                let j = i+1;
-                let executed = false;
-                while (j < lines.length && lines[j].startsWith("    ")) {
-                    const inner = lines[j].trim();
-                    if (evaluateExpression(condition)) {
-                        if (inner.startsWith("move =")) move = evaluateExpression(inner.split("=")[1].trim());
-                        else if (inner.includes("=")) {
-                            let [v, e] = inner.split("=");
-                            variables[v.trim()] = evaluateExpression(e.trim());
-                        }
-                        executed = true;
+    // --- Block parser ---
+    function executeBlock(startIndex) {
+        let i = startIndex;
+
+        while (i < lines.length) {
+
+            let line = lines[i];
+
+            // IF
+            if (line.startsWith("IF ")) {
+
+                const condition = line.match(/IF (.+) THEN \{/)[1];
+                const result = evaluate(condition);
+
+                i++; // move inside block
+
+                if (result) {
+                    i = executeBlock(i);
+                    return i;
+                } else {
+                    // Skip block
+                    i = skipBlock(i);
+
+                    // Handle ELSE IF / ELSE
+                    if (lines[i] && lines[i].startsWith("ELSE IF")) {
+                        continue;
                     }
-                    j++;
-                }
-                i = j-1;
-            }
-        } else if (line.startsWith("ELSE IF ")) {
-            const condMatch = line.match(/ELSE IF (.+) THEN/);
-            if (condMatch) {
-                let condition = condMatch[1];
-                if (evaluateExpression(condition)) {
-                    let inner = lines[i+1].trim();
-                    if (inner.startsWith("move =")) move = evaluateExpression(inner.split("=")[1].trim());
-                    else if (inner.includes("=")) {
-                        let [v, e] = inner.split("=");
-                        variables[v.trim()] = evaluateExpression(e.trim());
+                    if (lines[i] && lines[i].startsWith("ELSE")) {
+                        i++;
+                        return executeBlock(i);
                     }
                 }
             }
-        } else if (line.startsWith("ELSE")) {
-            let inner = lines[i+1].trim();
-            if (inner.startsWith("move =")) move = evaluateExpression(inner.split("=")[1].trim());
-            else if (inner.includes("=")) {
-                let [v, e] = inner.split("=");
-                variables[v.trim()] = evaluateExpression(e.trim());
+
+            // ELSE IF
+            else if (line.startsWith("ELSE IF ")) {
+
+                const condition = line.match(/ELSE IF (.+) THEN \{/)[1];
+                const result = evaluate(condition);
+
+                i++;
+
+                if (result) {
+                    i = executeBlock(i);
+                    return i;
+                } else {
+                    i = skipBlock(i);
+                }
             }
-        } else if (line.startsWith("move =")) {
-            move = evaluateExpression(line.split("=")[1].trim());
-        } else if (line.startsWith("RETURN")) {
-            move = evaluateExpression(line.split("RETURN")[1].trim());
-            return {move, variables};
-        } else if (line.includes("=")) {
-            let [v, e] = line.split("=");
-            variables[v.trim()] = evaluateExpression(e.trim());
+
+            // ELSE
+            else if (line.startsWith("ELSE")) {
+                i++;
+                return executeBlock(i);
+            }
+
+            // End block
+            else if (line === "}") {
+                return i + 1;
+            }
+
+            // RETURN
+            else if (line.startsWith("RETURN ")) {
+                const value = line.replace("RETURN ", "");
+                variables.move = evaluate(value);
+                return lines.length; // stop execution
+            }
+
+            // Assignment
+            else if (line.includes("=")) {
+                const [varName, expr] = line.split("=");
+                variables[varName.trim()] = evaluate(expr.trim());
+            }
+
+            i++;
         }
-        i++;
+
+        return i;
     }
-    return {move, variables};
+
+    function skipBlock(startIndex) {
+        let depth = 1;
+        let i = startIndex;
+
+        while (i < lines.length && depth > 0) {
+            if (lines[i].includes("{")) depth++;
+            if (lines[i] === "}") depth--;
+            i++;
+        }
+
+        return i;
+    }
+
+    executeBlock(0);
+
+    return {
+        move: variables.move,
+        variables
+    };
 }
