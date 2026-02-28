@@ -8,15 +8,20 @@ function runBotScript(script, state) {
 
     function evaluateExpression(expr) {
         expr = expr.replace(/\bRANDOM\(\)/g, () => Math.random() < 0.5 ? '"C"' : '"D"');
+
+        // Replace C and D literals
+        expr = expr.replace(/\bC\b/g, '"C"');
+        expr = expr.replace(/\bD\b/g, '"D"');
+
         // Replace variables
         for (let key in variables) {
-            expr = expr.replace(new RegExp(`\\b${key}\\b`, "g"), variables[key]);
+            expr = expr.replace(new RegExp(`\\b${key}\\b`, "g"), JSON.stringify(variables[key]));
         }
-        // Evaluate math
+
         try {
             return eval(expr);
         } catch (e) {
-            return expr; // fallback
+            return false;
         }
     }
 
