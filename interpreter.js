@@ -1,6 +1,12 @@
 function runBot(code, context) {
+
     const lines = code.split("\n").map(l => l.trim());
     const variables = { ...context };
+
+    // Built-in functions
+    variables.RANDOM = () => Math.random();
+    variables.C = "C";
+    variables.D = "D";
 
     let i = 0;
 
@@ -16,6 +22,7 @@ function runBot(code, context) {
 
     function runBlock() {
         while (i < lines.length) {
+
             let line = lines[i];
 
             if (!line || line.startsWith("#")) {
@@ -23,20 +30,18 @@ function runBot(code, context) {
                 continue;
             }
 
-            // END block
             if (line === "END") {
                 i++;
                 return;
             }
 
-            // RETURN
             if (line.startsWith("RETURN")) {
-                const value = line.replace("RETURN", "").trim();
-                return evalExpression(value);
+                const expr = line.replace("RETURN", "").trim();
+                return evalExpression(expr);
             }
 
-            // IF
             if (line.startsWith("IF")) {
+
                 const condition = line
                     .replace("IF", "")
                     .replace("THEN", "")
@@ -49,12 +54,13 @@ function runBot(code, context) {
                     const result = runBlock();
                     if (result !== undefined) return result;
 
-                    // Skip ELSE block if it exists
                     if (lines[i] === "ELSE") {
                         i++;
                         skipBlock();
                     }
+
                 } else {
+
                     skipBlock();
 
                     if (lines[i] === "ELSE") {
@@ -67,14 +73,12 @@ function runBot(code, context) {
                 continue;
             }
 
-            // ELSE (shouldn't happen alone, but skip safely)
             if (line === "ELSE") {
                 i++;
                 runBlock();
                 continue;
             }
 
-            // Assignment
             if (line.includes("=")) {
                 const [name, expr] = line.split("=");
                 variables[name.trim()] = evalExpression(expr.trim());
@@ -97,10 +101,9 @@ function runBot(code, context) {
 
     const result = runBlock();
 
-    // 🔒 GUARANTEED RETURN
     if (result === "C" || result === "D") {
         return result;
     }
 
-    return "C"; // default fallback
+    return "C"; // safe fallback
 }
