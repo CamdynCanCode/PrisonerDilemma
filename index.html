@@ -6,67 +6,103 @@
     body { font-family: sans-serif; padding: 20px; }
     textarea { width: 100%; height: 200px; font-family: monospace; font-size: 16px; }
     #results { margin-top: 20px; }
+    table { border-collapse: collapse; }
+    th, td { padding: 6px 10px; }
   </style>
 </head>
 <body>
-  <h1>Prisoner's Dilemma Bot</h1>
 
-  <p>Write your bot logic here:</p>
-  <textarea id="botCode"># Example Bot
-IF last == C THEN
-    move = D
-ELSE
-    move = RANDOM()
-RETURN move</textarea><br><br>
+<h1>Prisoner's Dilemma Bot</h1>
 
-  <button id="runBtn">Run Match vs Random Bot</button>
-  <button id="downloadBtn">Download Bot</button>
+<p>Write your bot logic here:</p>
 
-  <div id="results"></div>
+<textarea id="botCode"># Tit For Tat Example
+IF round == 1 THEN
+    RETURN C
+END
 
-  <script src="interpreter.js"></script>
-  <script>
-    function randomBot(state) {
-      return Math.random() < 0.5 ? "C" : "D";
-    }
+RETURN last
+</textarea>
 
-    document.getElementById("runBtn").addEventListener("click", () => {
-      const botCode = document.getElementById("botCode").value.split("\n");
-      let userState = { last: null, myScore: 0, opponentScore: 0 };
-      let botState = { last: null, myScore: 0, opponentScore: 0 };
-      const payoff = { "C,C":[3,3], "C,D":[0,5], "D,C":[5,0], "D,D":[1,1] };
-      let resultText = "<h2>Match Results</h2><table border='1'><tr><th>Round</th><th>Your Move</th><th>Bot Move</th><th>Score</th></tr>";
+<br><br>
 
-      for (let i=0;i<10;i++){
-        let {move, variables} = runBotScript(botCode.join("\n"), userState);
-        const userMove = move;
-        const botMove = randomBot(botState);
-        const [uPts,bPts] = payoff[`${userMove},${botMove}`];
-        userState.myScore += uPts;
-        userState.opponentScore += bPts;
-        userState.last = botMove;
+<button id="runBtn">Run Match vs Random Bot</button>
+<button id="downloadBtn">Download Bot</button>
 
-        botState.myScore += bPts;
-        botState.opponentScore += uPts;
-        botState.last = userMove;
+<div id="results"></div>
 
-        resultText += `<tr><td>${i+1}</td><td>${userMove}</td><td>${botMove}</td><td>${userState.myScore}-${userState.opponentScore}</td></tr>`;
-      }
+<script src="interpreter.js"></script>
 
-      resultText += `</table><h3>Final Score: You ${userState.myScore} - Bot ${userState.opponentScore}</h3>`;
-      document.getElementById("results").innerHTML = resultText;
+<script>
+function randomBot() {
+  return Math.random() < 0.5 ? "C" : "D";
+}
+
+document.getElementById("runBtn").addEventListener("click", () => {
+
+  const botCode = document.getElementById("botCode").value;
+
+  let userState = {
+    last: null,
+    myScore: 0,
+    opponentScore: 0
+  };
+
+  const payoff = {
+    "C,C":[3,3],
+    "C,D":[0,5],
+    "D,C":[5,0],
+    "D,D":[1,1]
+  };
+
+  let resultText = "<h2>Match Results</h2>";
+  resultText += "<table border='1'>";
+  resultText += "<tr><th>Round</th><th>Your Move</th><th>Bot Move</th><th>Score</th></tr>";
+
+  for (let i = 0; i < 10; i++) {
+
+    const userMove = runBot(botCode, {
+      round: i + 1,
+      last: userState.last,
+      myScore: userState.myScore,
+      opponentScore: userState.opponentScore
     });
 
-    document.getElementById("downloadBtn").addEventListener("click", () => {
-      const botCode = document.getElementById("botCode").value;
-      const blob = new Blob([botCode], {type: "text/plain"});
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "my_bot.txt";
-      a.click();
-      URL.revokeObjectURL(url);
-    });
-  </script>
+    const botMove = randomBot();
+
+    const [uPts, bPts] = payoff[`${userMove},${botMove}`];
+
+    userState.myScore += uPts;
+    userState.opponentScore += bPts;
+    userState.last = botMove;
+
+    resultText += `
+      <tr>
+        <td>${i+1}</td>
+        <td>${userMove}</td>
+        <td>${botMove}</td>
+        <td>${userState.myScore}-${userState.opponentScore}</td>
+      </tr>
+    `;
+  }
+
+  resultText += "</table>";
+  resultText += `<h3>Final Score: You ${userState.myScore} - Bot ${userState.opponentScore}</h3>`;
+
+  document.getElementById("results").innerHTML = resultText;
+});
+
+document.getElementById("downloadBtn").addEventListener("click", () => {
+  const botCode = document.getElementById("botCode").value;
+  const blob = new Blob([botCode], {type: "text/plain"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "my_bot.txt";
+  a.click();
+  URL.revokeObjectURL(url);
+});
+</script>
+
 </body>
 </html>
