@@ -435,10 +435,12 @@ RETURN last</textarea>
           <option value="alwaysD">vs Always Defect</option>
           <option value="titfortat">vs Tit for Tat</option>
           <option value="grudger">vs Grudger</option>
+          <option value="detective">vs Detective</option>
         </select>
         <span class="ctrl-label">Rounds:</span>
         <input class="rounds-input" type="number" id="roundsInput" value="10" min="1" max="100">
-        <button class="btn btn-secondary" id="downloadBtn">↓ Save</button>
+        <input class="rounds-input" type="text" id="botName" placeholder="Bot name..." style="width:120px;">
+        <button class="btn btn-secondary" id="downloadBtn">↓ Save Bot</button>
       </div>
     </div>
 
@@ -456,6 +458,19 @@ RETURN last</textarea>
           <div class="ref-row"><span class="ref-key">opponentScore</span><span class="ref-val">Opponent's cumulative score</span></div>
           <div class="ref-row"><span class="ref-key">C / D</span><span class="ref-val">Cooperate / Defect constants</span></div>
           <div class="ref-row"><span class="ref-key">RANDOM()</span><span class="ref-val">Returns 0.0–1.0</span></div>
+        </div>
+        <div class="ref-section">
+          <h3>History (last 5 rounds)</h3>
+          <div class="ref-row"><span class="ref-key">dCount</span><span class="ref-val">Opponent D count in last 5</span></div>
+          <div class="ref-row"><span class="ref-key">cCount</span><span class="ref-val">Opponent C count in last 5</span></div>
+        </div>
+        <div class="ref-section">
+          <h3>Strategy Fingerprints</h3>
+          <div class="ref-row"><span class="ref-key">Detective</span><span class="ref-val">Plays C,D,C,C in rounds 1–4. dCount==1 && round==4 is a strong signal</span></div>
+          <div class="ref-row"><span class="ref-key">Always D</span><span class="ref-val">dCount == 5 after round 5</span></div>
+          <div class="ref-row"><span class="ref-key">Always C</span><span class="ref-val">cCount == 5 after round 5</span></div>
+          <div class="ref-row"><span class="ref-key">Random</span><span class="ref-val">dCount 2–3 after round 5+</span></div>
+          <div class="ref-row"><span class="ref-key">Grudger/TFT</span><span class="ref-val">dCount mirrors your own defections</span></div>
         </div>
         <div class="ref-section">
           <h3>Syntax</h3>
@@ -572,7 +587,19 @@ const opponents = {
   },
   grudger: {
     name: "Grudger",
-    fn: (round, oppLast, oppHistory) => oppHistory.includes("D") ? "D" : "C"
+    fn: (round, userLastMove, userHistory) => userHistory.includes("D") ? "D" : "C"
+  },
+  detective: {
+    name: "Detective",
+    fn: (round, userLastMove, userHistory) => {
+      if (round === 1) return "C";
+      if (round === 2) return "D";
+      if (round === 3) return "C";
+      if (round === 4) return "C";
+      // If user ever retaliated during probe, switch to TFT
+      const userRetaliated = userHistory.slice(0, 4).includes("D");
+      return userRetaliated ? (userLastMove || "C") : "D";
+    }
   }
 };
 
@@ -598,10 +625,13 @@ document.querySelectorAll(".preset-btn").forEach(btn => {
 });
 
 document.getElementById("downloadBtn").addEventListener("click", () => {
-  const blob = new Blob([document.getElementById("botCode").value], {type:"text/plain"});
+  const botCode = document.getElementById("botCode").value;
+  const rawName = document.getElementById("botName").value.trim();
+  const fileName = rawName ? rawName.replace(/[^a-z0-9_\-]/gi, "_") : "my_bot";
+  const blob = new Blob([botCode], {type:"text/plain"});
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  a.href = url; a.download = "my_bot.txt"; a.click();
+  a.href = url; a.download = `${fileName}.txt`; a.click();
   URL.revokeObjectURL(url);
 });
 
@@ -614,29 +644,37 @@ document.getElementById("runBtn").addEventListener("click", () => {
 
   let userState = { last: null, myScore: 0, opponentScore: 0 };
   let oppLast = null;
-  let oppHistory = [];
+  let oppHistory = [];   // opponent's moves (what your bot sees as "last")
+  let userHistory = [];  // your bot's moves (what opponent sees)
   let rows = "";
   let error = null;
 
   for (let r = 0; r < rounds; r++) {
     let userMove;
+    // Build last-5 derived variables from opponent's move history
+    const hist5 = oppHistory.slice(-5);
+    const dCount = hist5.filter(m => m === "D").length;
+    const cCount = hist5.filter(m => m === "C").length;
     try {
       userMove = runBot(botCode, {
         round: r + 1,
         last: oppLast,
         myScore: userState.myScore,
-        opponentScore: userState.opponentScore
+        opponentScore: userState.opponentScore,
+        dCount,   // how many Ds in last 5 rounds
+        cCount,   // how many Cs in last 5 rounds
       });
     } catch(e) {
       error = e.message;
       break;
     }
 
-    const botMove = opp.fn(r + 1, userState.last, oppHistory);
+    const botMove = opp.fn(r + 1, userState.last, userHistory);
     const [uPts, bPts] = payoff[`${userMove},${botMove}`];
     userState.myScore += uPts;
     userState.opponentScore += bPts;
     oppHistory.push(botMove);
+    userHistory.push(userMove);
     oppLast = botMove;
     userState.last = userMove;
 
