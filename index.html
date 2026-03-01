@@ -465,12 +465,9 @@ RETURN last</textarea>
           <div class="ref-row"><span class="ref-key">cCount</span><span class="ref-val">Opponent C count in last 5</span></div>
         </div>
         <div class="ref-section">
-          <h3>Strategy Fingerprints</h3>
-          <div class="ref-row"><span class="ref-key">Detective</span><span class="ref-val">Plays C,D,C,C in rounds 1–4. dCount==1 && round==4 is a strong signal</span></div>
-          <div class="ref-row"><span class="ref-key">Always D</span><span class="ref-val">dCount == 5 after round 5</span></div>
-          <div class="ref-row"><span class="ref-key">Always C</span><span class="ref-val">cCount == 5 after round 5</span></div>
-          <div class="ref-row"><span class="ref-key">Random</span><span class="ref-val">dCount 2–3 after round 5+</span></div>
-          <div class="ref-row"><span class="ref-key">Grudger/TFT</span><span class="ref-val">dCount mirrors your own defections</span></div>
+          <h3>History (whole game)</h3>
+          <div class="ref-row"><span class="ref-key">dCountAll</span><span class="ref-val">Opponent D count all rounds</span></div>
+          <div class="ref-row"><span class="ref-key">cCountAll</span><span class="ref-val">Opponent C count all rounds</span></div>
         </div>
         <div class="ref-section">
           <h3>Syntax</h3>
@@ -651,18 +648,22 @@ document.getElementById("runBtn").addEventListener("click", () => {
 
   for (let r = 0; r < rounds; r++) {
     let userMove;
-    // Build last-5 derived variables from opponent's move history
+    // Build history variables from opponent's move history
     const hist5 = oppHistory.slice(-5);
     const dCount = hist5.filter(m => m === "D").length;
     const cCount = hist5.filter(m => m === "C").length;
+    const dCountAll = oppHistory.filter(m => m === "D").length;
+    const cCountAll = oppHistory.filter(m => m === "C").length;
     try {
       userMove = runBot(botCode, {
         round: r + 1,
         last: oppLast,
         myScore: userState.myScore,
         opponentScore: userState.opponentScore,
-        dCount,   // how many Ds in last 5 rounds
-        cCount,   // how many Cs in last 5 rounds
+        dCount,       // opponent D count in last 5 rounds
+        cCount,       // opponent C count in last 5 rounds
+        dCountAll,    // opponent D count entire game
+        cCountAll,    // opponent C count entire game
       });
     } catch(e) {
       error = e.message;
